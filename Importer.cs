@@ -150,10 +150,24 @@ namespace equImport
 
                     Dictionary<string, Dictionary<int, int>> table_old_new_key = new Dictionary<string, Dictionary<int, int>>();
                     Dictionary<string, TableInfo> infos = EquSchema.getSchema(sdb_con);
-                    //string str = "";
-                    //EquSchema.traversal_table_dep_from("Projects", infos, (string s)=> str+=s+"; ");
-                    //MessageBox.Show(str);
-                    copy_table("Users", infos, sdb_con, tdb_con, table_old_new_key);
+
+                    List<string> already_copyed = new List<string>();
+                    List<string> non_empty = Importer.non_empty_tables(sdb_con, infos);
+                    foreach (string non_empty_table in non_empty)
+                    {
+                        List<string> deps = new List<string>();
+                        EquSchema.traversal_table_dep_from(non_empty_table, infos, (string s)=> deps.Add(s));
+                        foreach (string table in deps)
+                        {
+                            if (!already_copyed.Contains(table))
+                            {
+                                copy_table(table, infos, sdb_con, tdb_con, table_old_new_key);
+                                already_copyed.Add(table);
+                            }
+                        }
+                    }
+
+                    
                 }
             }
         }
