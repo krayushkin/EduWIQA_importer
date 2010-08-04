@@ -18,7 +18,9 @@ namespace equImport
         public Form1()
         {
             InitializeComponent();
-            string[] tab = {null, null, "Actions"};
+            Importer.test_copy_table();
+
+
             string connectionString = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=X:\\ulstu\\equImport\\base\\base.mdb";
             DataTable t = new DataTable();
             DataTable t2;
@@ -30,7 +32,7 @@ namespace equImport
             {
                 connection.Open();
 
-                OleDbCommand com = new OleDbCommand("SELECT * from Users", connection);
+                OleDbCommand com = new OleDbCommand("SELECT * from Hints", connection);
                 OleDbDataAdapter adapter = new OleDbDataAdapter();
                 adapter.SelectCommand = com;
                 OleDbCommandBuilder builder = new OleDbCommandBuilder(adapter);
@@ -45,7 +47,9 @@ namespace equImport
 
             dataGridView1.DataSource = set.Tables[0];
             dataGridView2.DataSource = t2;
-            EquSchema.getSchema();
+            
+
+
         }
     }
 
