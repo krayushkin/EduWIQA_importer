@@ -5,7 +5,7 @@ using System.Text;
 using System.Data;
 using System.Data.OleDb;
 using System.Windows.Forms;
-
+using System.IO;
 
 namespace equImport
 {
@@ -149,55 +149,47 @@ namespace equImport
         /// <returns>
         /// id - есть ли дубликат
         /// </returns>
-        static public bool find(string table, OleDbConnection con, OleDbParameterCollection param, string primary_key, out int id)
+        static public Dictionary<int, int> find_all_duplicates(string table, DataTable source_t, OleDbConnection target_con, OleDbCommand select_com, string primary_key)
         {
-            string query_start = String.Format("SELECT * FROM [{0}] WHERE ", table);
-            string query_end = "";
-            
-            
-            for (int i = 0; i < param.Count; i++)
+            Dictionary<int, int> old_new_keys = new Dictionary<int,int>();
+            OleDbCommand select_target = select_com.Clone();
+            select_target.Connection = target_con;
+            OleDbDataReader reader = select_target.ExecuteReader();
+            DataTable target_t = new DataTable();
+            target_t.Load(reader);
+            foreach (DataRow source_row in source_t.Rows)
             {
-                if (i == param.Count - 1)
+                foreach (DataRow target_row in target_t.Rows)
                 {
-                    query_end += String.Format("[{0}] = ?", param[i].SourceColumn);
-                }
-                else
-                {
-                    query_end += String.Format("[{0}] = ?, ", param[i].SourceColumn);
+                    bool rows_equal = true;
+                    foreach (DataColumn col in source_t.Columns)
+                    {
+                        if (col.ColumnName != primary_key)
+                        {
+                            if (! source_row[col.ColumnName].Equals(target_row[col.ColumnName]))
+                            {
+                                rows_equal = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (rows_equal)
+                    {
+                        old_new_keys[(int)source_row[primary_key]] = (int)target_row[primary_key];
+                        break;
+                    }
                 }
             }
 
-            OleDbCommand com = new OleDbCommand(query_start+query_end, con);
-            foreach (OleDbParameter p in param)
-            {
-                com.Parameters.Add(p);
-            }
-
-           bool result;
-           OleDbDataReader reader = com.ExecuteReader();
-           DataTable t = new DataTable();
-           t.Load(reader);
-           if (t.Rows.Count > 1) throw new ApplicationException("more then 1 row");
-           if (t.Rows.Count == 1) result = true;
-           else result = false;
-           if (result)
-           {
-               id = (int)t.Rows[0][primary_key];
-           }
-           else
-           {
-               id = 0;
-           }
-
-           return result;
+            return old_new_keys;
         }
 
 
 
 
-        static public void test_copy_table(TextBox log)
+        static public void import(TextBox log)
         {
-            string source_db = "X:\\ulstu\\equImport\\add\\base1\\base.mdb";
+            string source_db = "X:\\ulstu\\equImport\\add\\base3\\base.mdb";
             string target_db = "X:\\ulstu\\equImport\\base\\base.mdb";
             using (OleDbConnection sdb_con = new OleDbConnection("Provider=Microsoft.Jet.OLEDB.4.0;Data Source="+source_db))
             {
@@ -225,10 +217,9 @@ namespace equImport
                             }
                         }
                     }
-
-                    
                 }
             }
+            log.AppendText("All done!\n");
         }
 
         static public void copy_table
@@ -253,6 +244,9 @@ namespace equImport
                 data_table.Load(reader);
 
                 table_old_new_key[table] = new Dictionary<int, int>();
+
+                Dictionary<int, int> duplicates = find_all_duplicates(table, data_table, target_con, com, infos[table].PrimaryKey);
+
                 foreach (DataRow row in data_table.Rows)
                 {
                     foreach (FKey fkey_i in infos[table].FKeys)
@@ -260,30 +254,6 @@ namespace equImport
                         int old_key = (int)row[fkey_i.Name];
                         row[fkey_i.Name] = table_old_new_key[fkey_i.Table][old_key];
                     }
-
-                    if (table == "Users")
-                    {
-                        row["SNick"] = "imp_" + ((string)row["SNick"]);
-                    }
-                    if (table == "Groups")
-                    {
-                        row["SName"] = "imp_" + (string)row["SName"];
-                    }
-
-                    List<string> no_copy = new List<string>();
-                    no_copy.Add("QAStatus");
-                    no_copy.Add("QATypes");
-                    no_copy.Add("OntologyLinkTypes");
-                    
-
-                    
-                    if ( no_copy.Contains(table))
-                    {
-                        int old = (int)row[infos[table].PrimaryKey];
-                        table_old_new_key[table][old] = old;
-                        continue;
-                    }
-               
 
                     OleDbCommand target_insert = builder.GetInsertCommand();
                     target_insert.Connection = target_con;
@@ -293,11 +263,22 @@ namespace equImport
                         param.Value = row[param.SourceColumn];
                     }
 
-                    target_insert.ExecuteNonQuery();
-                    OleDbCommand new_id_query = new OleDbCommand("SELECT @@IDENTITY", target_con);
-                    int new_id = (int)new_id_query.ExecuteScalar();
                     int old_id = (int)row[infos[table].PrimaryKey];
-                    table_old_new_key[table][old_id] = new_id;
+                    // пробуем найти дубликаты
+                    if ( duplicates.ContainsKey( old_id ))
+                    {
+                        int new_id = duplicates[old_id];
+                        table_old_new_key[table][old_id] = new_id;
+                    }
+                    else
+                    {
+                        target_insert.ExecuteNonQuery();
+                        OleDbCommand new_id_query = new OleDbCommand("SELECT @@IDENTITY", target_con);
+                        int new_id = (int)new_id_query.ExecuteScalar();
+                        table_old_new_key[table][old_id] = new_id;
+                    }
+
+                    
                 }
                 
 

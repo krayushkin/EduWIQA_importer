@@ -20,7 +20,7 @@ namespace equImport
             InitializeComponent();
 
 
-            string source_db = "X:\\ulstu\\equImport\\add\\base1\\base.mdb";
+            string source_db = "X:\\ulstu\\equImport\\add\\base2\\base.mdb";
             string target_db = "X:\\ulstu\\equImport\\Base\\base.mdb";
             using (OleDbConnection connection = new OleDbConnection("Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" + source_db))
             {
@@ -30,14 +30,12 @@ namespace equImport
                     
                     dt = connection.GetOleDbSchemaTable(OleDbSchemaGuid.Tables, null);
                     dataGridView1.DataSource = dt;
-                   
-
             }
         }
 
         private void button1_Click(object sender, EventArgs e)
         {
-            Importer.test_copy_table(textBox1);
+            Importer.import(textBox1);
         }
     }
 
