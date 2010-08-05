@@ -6,6 +6,7 @@ using System.Data;
 using System.Data.OleDb;
 using System.Windows.Forms;
 
+
 namespace equImport
 {
 
@@ -137,10 +138,67 @@ namespace equImport
 
     public static class Importer
     {
-        static public void test_copy_table()
+        /// <summary>
+        /// Ищет дубликат в записи с параметрами в param
+        /// </summary>
+        /// <param name="table">Целевая таблица</param>
+        /// <param name="con"></param>
+        /// <param name="param"></param>
+        /// <param name="primary_key"></param>
+        /// <param name="id">Главный ключ записи дубликата</param>
+        /// <returns>
+        /// id - есть ли дубликат
+        /// </returns>
+        static public bool find(string table, OleDbConnection con, OleDbParameterCollection param, string primary_key, out int id)
+        {
+            string query_start = String.Format("SELECT * FROM [{0}] WHERE ", table);
+            string query_end = "";
+            
+            
+            for (int i = 0; i < param.Count; i++)
+            {
+                if (i == param.Count - 1)
+                {
+                    query_end += String.Format("[{0}] = ?", param[i].SourceColumn);
+                }
+                else
+                {
+                    query_end += String.Format("[{0}] = ?, ", param[i].SourceColumn);
+                }
+            }
+
+            OleDbCommand com = new OleDbCommand(query_start+query_end, con);
+            foreach (OleDbParameter p in param)
+            {
+                com.Parameters.Add(p);
+            }
+
+           bool result;
+           OleDbDataReader reader = com.ExecuteReader();
+           DataTable t = new DataTable();
+           t.Load(reader);
+           if (t.Rows.Count > 1) throw new ApplicationException("more then 1 row");
+           if (t.Rows.Count == 1) result = true;
+           else result = false;
+           if (result)
+           {
+               id = (int)t.Rows[0][primary_key];
+           }
+           else
+           {
+               id = 0;
+           }
+
+           return result;
+        }
+
+
+
+
+        static public void test_copy_table(TextBox log)
         {
             string source_db = "X:\\ulstu\\equImport\\add\\base1\\base.mdb";
-            string target_db = "X:\\ulstu\\equImport\\Base\\base.mdb";
+            string target_db = "X:\\ulstu\\equImport\\base\\base.mdb";
             using (OleDbConnection sdb_con = new OleDbConnection("Provider=Microsoft.Jet.OLEDB.4.0;Data Source="+source_db))
             {
                 using (OleDbConnection tdb_con = new OleDbConnection("Provider=Microsoft.Jet.OLEDB.4.0;Data Source="+target_db))
@@ -151,7 +209,7 @@ namespace equImport
                     Dictionary<string, Dictionary<int, int>> table_old_new_key = new Dictionary<string, Dictionary<int, int>>();
                     Dictionary<string, TableInfo> infos = EquSchema.getSchema(sdb_con);
 
-                    List<string> already_copyed = new List<string>();
+                    List<string> already_copied = new List<string>();
                     List<string> non_empty = Importer.non_empty_tables(sdb_con, infos);
                     foreach (string non_empty_table in non_empty)
                     {
@@ -159,10 +217,11 @@ namespace equImport
                         EquSchema.traversal_table_dep_from(non_empty_table, infos, (string s)=> deps.Add(s));
                         foreach (string table in deps)
                         {
-                            if (!already_copyed.Contains(table))
+                            if (!already_copied.Contains(table))
                             {
+                                log.AppendText(String.Format("copy {0}\n", table));
                                 copy_table(table, infos, sdb_con, tdb_con, table_old_new_key);
-                                already_copyed.Add(table);
+                                already_copied.Add(table);
                             }
                         }
                     }
@@ -187,6 +246,9 @@ namespace equImport
             {
                 OleDbDataAdapter adapter = new OleDbDataAdapter(com);
                 OleDbCommandBuilder builder = new OleDbCommandBuilder(adapter);
+                builder.QuotePrefix = "[";
+                builder.QuoteSuffix = "]";
+
                 DataTable data_table = new DataTable();
                 data_table.Load(reader);
 
@@ -203,14 +265,34 @@ namespace equImport
                     {
                         row["SNick"] = "imp_" + ((string)row["SNick"]);
                     }
+                    if (table == "Groups")
+                    {
+                        row["SName"] = "imp_" + (string)row["SName"];
+                    }
 
+                    List<string> no_copy = new List<string>();
+                    no_copy.Add("QAStatus");
+                    no_copy.Add("QATypes");
+                    no_copy.Add("OntologyLinkTypes");
+                    
+
+                    
+                    if ( no_copy.Contains(table))
+                    {
+                        int old = (int)row[infos[table].PrimaryKey];
+                        table_old_new_key[table][old] = old;
+                        continue;
+                    }
+               
 
                     OleDbCommand target_insert = builder.GetInsertCommand();
                     target_insert.Connection = target_con;
+
                     foreach (OleDbParameter param in target_insert.Parameters)
                     {
                         param.Value = row[param.SourceColumn];
                     }
+
                     target_insert.ExecuteNonQuery();
                     OleDbCommand new_id_query = new OleDbCommand("SELECT @@IDENTITY", target_con);
                     int new_id = (int)new_id_query.ExecuteScalar();

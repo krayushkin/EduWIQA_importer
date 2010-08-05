@@ -18,38 +18,26 @@ namespace equImport
         public Form1()
         {
             InitializeComponent();
-            Importer.test_copy_table();
 
 
-            string connectionString = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=X:\\ulstu\\equImport\\base\\base.mdb";
-            DataTable t = new DataTable();
-            DataTable t2;
-
-            List<string> tables = new List<string>();
-
-            DataSet set = new DataSet();
-            using (OleDbConnection connection = new OleDbConnection(connectionString))
+            string source_db = "X:\\ulstu\\equImport\\add\\base1\\base.mdb";
+            string target_db = "X:\\ulstu\\equImport\\Base\\base.mdb";
+            using (OleDbConnection connection = new OleDbConnection("Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" + source_db))
             {
-                connection.Open();
+                    Dictionary<string, TableInfo> infos_dict = new Dictionary<string, TableInfo>();
+                    DataTable dt;
+                    connection.Open();
+                    
+                    dt = connection.GetOleDbSchemaTable(OleDbSchemaGuid.Tables, null);
+                    dataGridView1.DataSource = dt;
+                   
 
-                OleDbCommand com = new OleDbCommand("SELECT * from Hints", connection);
-                OleDbDataAdapter adapter = new OleDbDataAdapter();
-                adapter.SelectCommand = com;
-                OleDbCommandBuilder builder = new OleDbCommandBuilder(adapter);
-                
-                adapter.Fill(set);
-                t2 = connection.GetOleDbSchemaTable(OleDbSchemaGuid.Columns, null);
-                
-
-                // The connection is automatically closed at 
-                // the end of the Using block.
             }
+        }
 
-            dataGridView1.DataSource = set.Tables[0];
-            dataGridView2.DataSource = t2;
-            
-
-
+        private void button1_Click(object sender, EventArgs e)
+        {
+            Importer.test_copy_table(textBox1);
         }
     }
 
